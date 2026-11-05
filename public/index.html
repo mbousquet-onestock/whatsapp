@@ -50,13 +50,18 @@
   <header><h1>💬 Envoi de messages WhatsApp</h1></header>
   <main>
     <div id="dry" class="banner" hidden>
-      Mode simulation : configurez <code>WHATSAPP_TOKEN</code> et <code>WHATSAPP_PHONE_NUMBER_ID</code> dans <code>.env</code> pour envoyer de vrais messages.
+      Mode simulation : configurez <code>WHATSAPP_TOKEN</code> et <code>WHATSAPP_PHONE_NUMBER_ID</code> (fichier <code>.env</code> en local, ou <em>Settings → Environment Variables</em> sur Vercel) pour envoyer de vrais messages.
     </div>
 
     <form id="form" class="card">
       <div class="tabs">
         <button type="button" data-type="text" class="active">Message libre</button>
         <button type="button" data-type="template">Template</button>
+      </div>
+
+      <div id="pwd-field" hidden>
+        <label for="pwd">Mot de passe</label>
+        <input id="pwd" type="password" autocomplete="current-password" />
       </div>
 
       <label for="to">Destinataire(s)</label>
@@ -89,7 +94,11 @@
     </form>
 
     <section class="card">
-      <h2 style="margin-top:0;font-size:1.05rem">Historique</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="margin:0;font-size:1.05rem">Historique</h2>
+        <button type="button" id="clear" style="background:none;color:var(--muted);padding:4px 8px">Effacer</button>
+      </div>
+      <div class="hint" style="margin-bottom:12px">Conservé dans ce navigateur uniquement.</div>
       <ul id="history"><li class="meta" style="background:none">Aucun message envoyé.</li></ul>
     </section>
   </main>
@@ -112,8 +121,16 @@
       return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
-    function render(history) {
-      if (!history.length) return;
+    const KEY = 'wa-history';
+    function load(k, def) { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } }
+    function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+    let history = load(KEY, []);
+
+    function render() {
+      if (!history.length) {
+        $('history').innerHTML = '<li class="meta" style="background:none">Aucun message envoyé.</li>';
+        return;
+      }
       $('history').innerHTML = history.map((h) => `
         <li class="${h.ok ? '' : 'ko'}">
           <strong>${h.ok ? '✅' : '❌'} +${esc(h.to)}</strong> — ${esc(h.preview)}
@@ -122,10 +139,7 @@
         </li>`).join('');
     }
 
-    async function refresh() {
-      const r = await fetch('/api/history').then((r) => r.json());
-      render(r.history);
-    }
+    $('clear').addEventListener('click', () => { history = []; save(KEY, history); render(); });
 
     $('form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -139,11 +153,15 @@
       $('send').disabled = true;
       $('send').textContent = 'Envoi…';
       try {
-        const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const data = await r.json();
-        if (!r.ok) alert(data.error);
-        else if (data.results.every((x) => x.ok) && type === 'text') $('text').value = '';
-        await refresh();
+        const headers = { 'Content-Type': 'application/json' };
+        if (!$('pwd-field').hidden) headers['X-App-Password'] = $('pwd').value;
+        const r = await fetch('/api/send', { method: 'POST', headers, body: JSON.stringify(body) });
+        const data = await r.json().catch(() => ({ error: `Erreur serveur (HTTP ${r.status})` }));
+        if (!r.ok) return alert(data.error || `Erreur HTTP ${r.status}`);
+        history = [...data.results.reverse(), ...history].slice(0, 200);
+        save(KEY, history);
+        render();
+        if (data.results.every((x) => x.ok) && type === 'text') { $('text').value = ''; $('len').textContent = 0; }
       } catch (err) {
         alert('Erreur réseau : ' + err.message);
       } finally {
@@ -152,8 +170,11 @@
       }
     });
 
-    fetch('/api/status').then((r) => r.json()).then((s) => ($('dry').hidden = !s.dryRun));
-    refresh();
+    fetch('/api/status').then((r) => r.json()).then((s) => {
+      $('dry').hidden = !s.dryRun;
+      $('pwd-field').hidden = !s.passwordRequired;
+    }).catch(() => {});
+    render();
   </script>
 </body>
 </html>

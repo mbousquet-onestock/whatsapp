@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePhone, buildPayload } from '../lib/whatsapp.js';
-import { createApp } from '../server.js';
+import { createApp } from '../local-server.js';
+import { sendHandler } from '../lib/handlers.js';
 
 test('normalizePhone', () => {
   assert.equal(normalizePhone('+33 6 12 34 56 78'), '33612345678');
@@ -45,9 +46,6 @@ test('POST /api/send appelle Graph API avec le bon payload', async () => {
     assert.match(calls[0].url, /\/123\/messages$/);
     assert.equal(calls[0].opts.headers.Authorization, 'Bearer tok');
     assert.equal(JSON.parse(calls[0].opts.body).to, '33611111111');
-
-    const h = await fetch(`${base}/api/history`).then((r) => r.json());
-    assert.equal(h.history.length, 2);
   });
 });
 
@@ -65,4 +63,28 @@ test('erreur Meta remontée et mode simulation sans token', async () => {
     assert.equal(r.results[0].ok, true);
     assert.equal(r.results[0].dryRun, true);
   });
+});
+
+test('mot de passe APP_PASSWORD exigé', async () => {
+  await withServer({ APP_PASSWORD: 'secret' }, fetch, async (base) => {
+    const s = await fetch(`${base}/api/status`).then((r) => r.json());
+    assert.equal(s.passwordRequired, true);
+    const body = JSON.stringify({ to: '+33611111111', text: 'x' });
+    let r = await fetch(`${base}/api/send`, { method: 'POST', body });
+    assert.equal(r.status, 401);
+    r = await fetch(`${base}/api/send`, { method: 'POST', body, headers: { 'X-App-Password': 'secret' } });
+    assert.equal(r.status, 200);
+  });
+});
+
+test('handler compatible Vercel (req.body déjà analysé)', async () => {
+  const handler = sendHandler({}, fetch);
+  const res = {
+    headers: {},
+    setHeader(k, v) { this.headers[k] = v; },
+    end(b) { this.body = JSON.parse(b); },
+  };
+  await handler({ method: 'POST', headers: {}, body: { to: ['+33611111111'], text: 'x' } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.results[0].ok, true);
 });
