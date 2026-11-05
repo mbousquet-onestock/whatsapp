@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Envoi WhatsApp</title>
+  <style>
+    :root {
+      --bg: #f0f2f5; --card: #fff; --text: #111b21; --muted: #667781; --border: #d1d7db;
+      --accent: #00a884; --accent-dark: #008069; --ok: #e7f8ef; --ko: #fdecec; --ko-text: #b42318;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b141a; --card: #111b21; --text: #e9edef; --muted: #8696a0; --border: #2a3942;
+        --ok: #10332a; --ko: #3a1a1a; --ko-text: #ff8a80;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    header { background: var(--accent-dark); color: #fff; padding: 16px; }
+    header h1 { margin: 0 auto; max-width: 760px; font-size: 1.25rem; }
+    main { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+    .card { background: var(--card); border-radius: 10px; padding: 20px; border: 1px solid var(--border); }
+    label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: .9rem; }
+    .hint { color: var(--muted); font-size: .8rem; margin-top: 4px; }
+    input, textarea, select {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font: inherit; background: var(--bg); color: var(--text);
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    .tabs { display: flex; gap: 8px; }
+    .tabs button { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button { padding: 10px 16px; border: 0; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+    .send { margin-top: 18px; width: 100%; background: var(--accent); color: #fff; font-size: 1rem; }
+    .send:disabled { opacity: .6; cursor: wait; }
+    .banner { background: #fff4ce; color: #5c4400; padding: 10px 14px; border-radius: 8px; font-size: .9rem; }
+    .row { display: flex; gap: 12px; } .row > div { flex: 1; }
+    ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+    li { padding: 10px 12px; border-radius: 8px; font-size: .9rem; background: var(--ok); }
+    li.ko { background: var(--ko); }
+    li .meta { color: var(--muted); font-size: .8rem; }
+    li .err { color: var(--ko-text); }
+    .count { text-align: right; }
+    [hidden] { display: none !important; }
+    @media (max-width: 520px) { .row { flex-direction: column; gap: 0; } }
+  </style>
+</head>
+<body>
+  <header><h1>💬 Envoi de messages WhatsApp</h1></header>
+  <main>
+    <div id="dry" class="banner" hidden>
+      Mode simulation : configurez <code>WHATSAPP_TOKEN</code> et <code>WHATSAPP_PHONE_NUMBER_ID</code> dans <code>.env</code> pour envoyer de vrais messages.
+    </div>
+
+    <form id="form" class="card">
+      <div class="tabs">
+        <button type="button" data-type="text" class="active">Message libre</button>
+        <button type="button" data-type="template">Template</button>
+      </div>
+
+      <label for="to">Destinataire(s)</label>
+      <textarea id="to" rows="2" style="min-height:60px" placeholder="+33612345678, +33698765432" required></textarea>
+      <div class="hint">Format international. Séparez plusieurs numéros par une virgule ou un retour à la ligne.</div>
+
+      <div id="text-fields">
+        <label for="text">Message</label>
+        <textarea id="text" maxlength="4096" placeholder="Bonjour 👋"></textarea>
+        <div class="hint count"><span id="len">0</span> / 4096</div>
+        <div class="hint">Un message libre n'est délivré que si le destinataire vous a écrit dans les dernières 24 h. Sinon, utilisez un template approuvé.</div>
+      </div>
+
+      <div id="tpl-fields" hidden>
+        <div class="row">
+          <div>
+            <label for="template">Nom du template</label>
+            <input id="template" placeholder="hello_world" />
+          </div>
+          <div>
+            <label for="language">Langue</label>
+            <input id="language" value="fr" placeholder="fr, en_US…" />
+          </div>
+        </div>
+        <label for="params">Variables ({{1}}, {{2}}…)</label>
+        <textarea id="params" style="min-height:60px" placeholder="Une variable par ligne"></textarea>
+      </div>
+
+      <button class="send" id="send" type="submit">Envoyer</button>
+    </form>
+
+    <section class="card">
+      <h2 style="margin-top:0;font-size:1.05rem">Historique</h2>
+      <ul id="history"><li class="meta" style="background:none">Aucun message envoyé.</li></ul>
+    </section>
+  </main>
+
+  <script>
+    let type = 'text';
+    const $ = (id) => document.getElementById(id);
+
+    document.querySelectorAll('.tabs button').forEach((b) =>
+      b.addEventListener('click', () => {
+        type = b.dataset.type;
+        document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
+        $('text-fields').hidden = type !== 'text';
+        $('tpl-fields').hidden = type !== 'template';
+      })
+    );
+    $('text').addEventListener('input', () => ($('len').textContent = $('text').value.length));
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function render(history) {
+      if (!history.length) return;
+      $('history').innerHTML = history.map((h) => `
+        <li class="${h.ok ? '' : 'ko'}">
+          <strong>${h.ok ? '✅' : '❌'} +${esc(h.to)}</strong> — ${esc(h.preview)}
+          ${h.error ? `<div class="err">${esc(h.error)}</div>` : ''}
+          <div class="meta">${new Date(h.at).toLocaleString('fr-FR')}${h.dryRun ? ' · simulation' : ''}</div>
+        </li>`).join('');
+    }
+
+    async function refresh() {
+      const r = await fetch('/api/history').then((r) => r.json());
+      render(r.history);
+    }
+
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = { to: $('to').value, type };
+      if (type === 'text') body.text = $('text').value;
+      else Object.assign(body, {
+        template: $('template').value.trim(),
+        language: $('language').value.trim(),
+        params: $('params').value.split('\n').map((s) => s.trim()).filter(Boolean),
+      });
+      $('send').disabled = true;
+      $('send').textContent = 'Envoi…';
+      try {
+        const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await r.json();
+        if (!r.ok) alert(data.error);
+        else if (data.results.every((x) => x.ok) && type === 'text') $('text').value = '';
+        await refresh();
+      } catch (err) {
+        alert('Erreur réseau : ' + err.message);
+      } finally {
+        $('send').disabled = false;
+        $('send').textContent = 'Envoyer';
+      }
+    });
+
+    fetch('/api/status').then((r) => r.json()).then((s) => ($('dry').hidden = !s.dryRun));
+    refresh();
+  </script>
+</body>
+</html>
