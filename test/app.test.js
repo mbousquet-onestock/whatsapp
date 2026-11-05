@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePhone, buildPayload } from '../lib/whatsapp.js';
-import { createApp } from '../local-server.js';
+import { createApp } from '../server.js';
 import { sendHandler } from '../lib/handlers.js';
 
 test('normalizePhone', () => {

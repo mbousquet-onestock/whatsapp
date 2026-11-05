@@ -4,11 +4,12 @@
   "description": "Petite app web pour envoyer des messages WhatsApp via l'API WhatsApp Cloud (Meta)",
   "type": "module",
   "scripts": {
-    "start": "node --env-file-if-exists=.env local-server.js",
+    "start": "node --env-file-if-exists=.env server.js",
     "test": "node --test"
   },
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "main": "server.js"
 }

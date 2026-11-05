@@ -1,5 +1,8 @@
-// Serveur local (npm start). Sur Vercel, ce fichier n'est pas utilisé :
-// public/ est servi en statique et api/*.js devient des fonctions serverless.
+// Point d'entrée de l'app.
+// - En local (npm start) : démarre un serveur HTTP.
+// - Sur Vercel (preset serveur Node/Express) : le handler exporté par défaut est utilisé
+//   comme fonction, et public/ est servi en statique.
+// - Sur Vercel (preset "Other") : api/*.js sont utilisés directement.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
@@ -9,10 +12,10 @@ import { json, sendHandler, statusHandler, config } from './lib/handlers.js';
 const PUBLIC_DIR = join(fileURLToPath(new URL('.', import.meta.url)), 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css' };
 
-export function createApp(env = process.env, fetchImpl = fetch) {
+export function createHandler(env = process.env, fetchImpl = fetch) {
   const routes = { '/api/send': sendHandler(env, fetchImpl), '/api/status': statusHandler(env) };
 
-  return http.createServer(async (req, res) => {
+  return async (req, res) => {
     const { pathname } = new URL(req.url, 'http://localhost');
     try {
       if (routes[pathname]) return await routes[pathname](req, res);
@@ -26,8 +29,14 @@ export function createApp(env = process.env, fetchImpl = fetch) {
     } catch (e) {
       json(res, 500, { error: e.message });
     }
-  });
+  };
 }
+
+export function createApp(env = process.env, fetchImpl = fetch) {
+  return http.createServer(createHandler(env, fetchImpl));
+}
+
+export default createHandler();
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT) || 3000;
