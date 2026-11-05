@@ -1,8 +1,7 @@
 // Point d'entrée de l'app.
 // - En local (npm start) : démarre un serveur HTTP.
-// - Sur Vercel (preset serveur Node/Express) : le handler exporté par défaut est utilisé
-//   comme fonction, et public/ est servi en statique.
-// - Sur Vercel (preset "Other") : api/*.js sont utilisés directement.
+// - Sur Vercel : vercel.json impose le mode sans framework ; public/ est servi en statique
+//   et api/*.js sont les fonctions. Ce fichier n'y est pas utilisé.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';

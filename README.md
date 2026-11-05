@@ -23,9 +23,9 @@ Ouvrir ensuite http://localhost:3000.
 
 ## Déploiement sur Vercel
 
-L'app est prête pour Vercel : `public/` est servi en statique et `api/send.js` / `api/status.js` deviennent des fonctions serverless (Framework Preset **Other**), ou `server.js` devient la fonction (preset serveur Node/Express) : les deux réglages fonctionnent.
+L'app est prête pour Vercel : `public/` est servi en statique et `api/send.js` / `api/status.js` deviennent des fonctions serverless. Le fichier `vercel.json` force ce mode quel que soit le *Framework Preset* choisi dans Vercel (`server.js` ne sert qu'en local).
 
-1. Importer le dépôt dans Vercel (**Other** ou **Express**, aucune commande de build).
+1. Importer le dépôt dans Vercel (aucune commande de build).
 2. Dans **Settings → Environment Variables**, ajouter `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` et **`APP_PASSWORD`** (fortement conseillé : sans lui, n'importe qui ayant l'URL peut envoyer des messages depuis votre numéro).
 3. Redéployer.
 
